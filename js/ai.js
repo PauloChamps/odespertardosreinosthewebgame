@@ -1,9 +1,11 @@
 import { firstEmptyIndex } from "./player.js";
+import { applyMagicEffect, canUseAttack, applyCharacterAttack } from "./combat.js";
 
-export function runBotMainPhase(player, opponents, log) {
+export function runBotMainPhase(player, allPlayers, log) {
+  const opponents = allPlayers.filter((p) => p.id !== player.id && p.alive);
+  const allies = allPlayers.filter((p) => p.id === player.id);
+
   const charIdx = player.hand.findIndex((c) => c.type === "character");
-  const magicIdx = player.hand.findIndex((c) => c.type === "magic");
-
   if (!player.usedCharacterThisTurn && charIdx >= 0) {
     const slot = firstEmptyIndex(player.characterSlots);
     if (slot >= 0) {
@@ -14,17 +16,53 @@ export function runBotMainPhase(player, opponents, log) {
     }
   }
 
+  const magicIdx = player.hand.findIndex((c) => c.type === "magic");
   if (!player.usedMagicThisTurn && magicIdx >= 0) {
     const slot = firstEmptyIndex(player.magicSlots);
     if (slot >= 0) {
       const [card] = player.hand.splice(magicIdx, 1);
       player.magicSlots[slot] = card;
       player.usedMagicThisTurn = true;
-      log(`${player.name} posicionou magia ${card.name}.`);
+
+      const targetInfo = chooseBotMagicTarget(card, allies, opponents);
+      log(applyMagicEffect(card, player, allies, opponents, targetInfo));
     }
   }
+}
 
-  return opponents.filter((o) => o.alive);
+function chooseBotMagicTarget(card, allies, opponents) {
+  if (card.target === "ally_character") {
+    const ally = allies[0];
+    const slotIndex = ally.characterSlots.findIndex(Boolean);
+    return { playerIndex: 0, slotIndex: Math.max(0, slotIndex) };
+  }
+
+  const enemyIndex = opponents.findIndex((p) => p.characterSlots.some(Boolean));
+  const chosenEnemy = opponents[Math.max(0, enemyIndex)] ?? opponents[0];
+  const slotIndex = chosenEnemy.characterSlots.findIndex(Boolean);
+  return { playerIndex: Math.max(0, enemyIndex), slotIndex: Math.max(0, slotIndex) };
+}
+
+export function runBotAttackPhase(player, opponents, log) {
+  for (const attackerCard of player.characterSlots.filter(Boolean)) {
+    const enemy = opponents.find((op) => op.alive);
+    if (!enemy) break;
+
+    const enemyCharIndex = enemy.characterSlots.findIndex(Boolean);
+    const targetType = enemyCharIndex >= 0 ? "character" : "player";
+    const targetSlotIndex = enemyCharIndex >= 0 ? enemyCharIndex : -1;
+
+    const attackType = canUseAttack(attackerCard, "GPLUS")
+      ? "GPLUS"
+      : canUseAttack(attackerCard, "G2")
+      ? "G2"
+      : "G1";
+
+    const result = applyCharacterAttack({ attackerCard, attackType, defender: enemy, targetType, targetSlotIndex });
+    if (result.ok) {
+      log(`${player.name} atacou com ${attackType} e causou ${result.damage}.`);
+    }
+  }
 }
 
 export function botChooseBossAttack() {

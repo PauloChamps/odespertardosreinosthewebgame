@@ -1,24 +1,19 @@
 import { createPlayer, firstEmptyIndex, resetTurnFlags } from "./player.js";
 import { drawCard } from "./deck.js";
 import { createUIRefs, renderBattlefield, renderHand, renderPlayers, appendLog } from "./ui.js";
-import { runBotMainPhase, botChooseBossAttack } from "./ai.js";
-import { applyCharacterAttack, applyMagic, tickCooldowns } from "./combat.js";
-import { getBossAttacks, resolveBossTurn, shouldSpawnBoss } from "./boss.js";
+import { runBotMainPhase, runBotAttackPhase, botChooseBossAttack } from "./ai.js";
+import { applyCharacterAttack, applyMagicEffect, canUseAttack, startTurnCooldownTick } from "./combat.js";
+import { resolveBossTurn, shouldSpawnBoss } from "./boss.js";
 
 const ui = createUIRefs();
-const state = {
-  players: [],
-  round: 1,
-  turnIndex: 0,
-  started: false,
-};
-
-function alivePlayers() {
-  return state.players.filter((p) => p.alive);
-}
+const state = { players: [], round: 1, turnIndex: 0, started: false };
 
 function currentPlayer() {
   return state.players[state.turnIndex];
+}
+
+function alivePlayers() {
+  return state.players.filter((p) => p.alive);
 }
 
 function nextAliveIndex(fromIndex) {
@@ -29,6 +24,10 @@ function nextAliveIndex(fromIndex) {
   return fromIndex;
 }
 
+function log(msg) {
+  appendLog(ui.log, msg);
+}
+
 function refreshUI() {
   const cp = currentPlayer();
   ui.roundCounter.textContent = `Rodada: ${state.round}`;
@@ -36,56 +35,98 @@ function refreshUI() {
   renderPlayers(state.players, cp?.id, ui.playersArea);
   renderBattlefield(state.players, ui.battlefield);
   if (cp && !cp.isBot && cp.alive) renderHand(cp, ui.hand, playHumanCard);
-  else ui.hand.innerHTML = "<div class='card hidden-card'>Aguarde o turno do bot...</div>";
+  else ui.hand.innerHTML = "<div class='card hidden-card'>Aguarde o turno dos bots...</div>";
   ui.endTurnBtn.disabled = !cp || cp.isBot || !cp.alive;
-}
-
-function log(msg) {
-  appendLog(ui.log, msg);
 }
 
 function startGame() {
   const total = Number(ui.playerCount.value);
   state.players = [createPlayer(1, "Você", false)];
   for (let i = 2; i <= total; i++) state.players.push(createPlayer(i, `Bot ${i - 1}`, true));
-
   state.round = 1;
   state.turnIndex = 0;
   state.started = true;
   ui.setupPanel.classList.add("hidden");
   ui.table.classList.remove("hidden");
   ui.log.textContent = "";
-  log("Jogo iniciado! Primeira rodada sem ataques.");
+  log("Jogo iniciado. Rodada 1 sem ataques.");
   refreshUI();
 }
 
+/**
+ * Jogador humano joga uma carta da mão.
+ * Personagem: apenas 1 por rodada.
+ * Magia: apenas 1 ativação por rodada, com alvo selecionável.
+ */
 function playHumanCard(cardId) {
   const player = currentPlayer();
-  if (!player || player.isBot) return;
+  if (!player || player.isBot || !player.alive) return;
 
-  const index = player.hand.findIndex((c) => c.id === cardId);
-  if (index < 0) return;
-  const card = player.hand[index];
+  const handIndex = player.hand.findIndex((c) => c.id === cardId);
+  if (handIndex < 0) return;
+  const card = player.hand[handIndex];
 
   if (card.type === "character") {
-    if (player.usedCharacterThisTurn) return log("Você já invocou 1 personagem nesta rodada.");
+    if (player.usedCharacterThisTurn) return log("Limite: 1 personagem por rodada.");
     const slot = firstEmptyIndex(player.characterSlots);
     if (slot < 0) return log("Sem espaço para personagem.");
-    player.hand.splice(index, 1);
+    player.hand.splice(handIndex, 1);
     player.characterSlots[slot] = card;
     player.usedCharacterThisTurn = true;
     log(`Você invocou ${card.name}.`);
-  } else {
-    if (player.usedMagicThisTurn) return log("Você já ativou/colocou 1 magia nesta rodada.");
-    const slot = firstEmptyIndex(player.magicSlots);
-    if (slot < 0) return log("Sem espaço para carta mágica.");
-    player.hand.splice(index, 1);
-    player.magicSlots[slot] = card;
-    const msg = applyMagic(card, player, state.players.filter((p) => p.id !== player.id));
-    player.usedMagicThisTurn = true;
-    log(msg);
+    return refreshUI();
   }
+
+  if (player.usedMagicThisTurn) return log("Limite: 1 magia ativada por rodada.");
+  const slot = firstEmptyIndex(player.magicSlots);
+  if (slot < 0) return log("Sem espaço para magia.");
+
+  player.hand.splice(handIndex, 1);
+  player.magicSlots[slot] = card;
+  player.usedMagicThisTurn = true;
+
+  const allies = [player];
+  const enemies = state.players.filter((p) => p.id !== player.id && p.alive);
+  const targetInfo = chooseHumanMagicTarget(card, allies, enemies);
+  log(applyMagicEffect(card, player, allies, enemies, targetInfo));
   refreshUI();
+}
+
+function chooseHumanMagicTarget(card, allies, enemies) {
+  if (card.target === "ally_character") {
+    const slotIndex = Number(window.prompt("Escolha slot aliado (0-4):", "0"));
+    return { playerIndex: 0, slotIndex: Number.isInteger(slotIndex) ? slotIndex : 0 };
+  }
+
+  const enemyList = enemies.map((e, idx) => `${idx}-${e.name}`).join(" | ");
+  const playerIndex = Number(window.prompt(`Escolha inimigo: ${enemyList}`, "0"));
+  const slotIndex = Number(window.prompt("Escolha slot inimigo (0-4):", "0"));
+  return {
+    playerIndex: Number.isInteger(playerIndex) ? playerIndex : 0,
+    slotIndex: Number.isInteger(slotIndex) ? slotIndex : 0,
+  };
+}
+
+function chooseHumanAttack(attackerCard, opponents) {
+  const atk = (window.prompt("Escolha ataque: G1, G2, G+", "G1") || "G1").toUpperCase();
+  const attackType = atk === "G+" ? "GPLUS" : atk;
+  if (!["G1", "G2", "GPLUS"].includes(attackType)) return null;
+  if (!canUseAttack(attackerCard, attackType)) {
+    log(`Ataque ${attackType} em recarga.`);
+    return null;
+  }
+
+  const opponentList = opponents.map((p, i) => `${i}-${p.name}`).join(" | ");
+  const opIndex = Number(window.prompt(`Escolha alvo jogador: ${opponentList}`, "0"));
+  const defender = opponents[opIndex] ?? opponents[0];
+  const targetType = (window.prompt("Alvo: P (jogador) ou C (personagem)", "C") || "C").toUpperCase();
+
+  if (targetType === "C") {
+    const slotIndex = Number(window.prompt("Escolha slot do personagem inimigo (0-4)", "0"));
+    return { attackType, defender, targetType: "character", targetSlotIndex: Number.isInteger(slotIndex) ? slotIndex : 0 };
+  }
+
+  return { attackType, defender, targetType: "player", targetSlotIndex: -1 };
 }
 
 function executeAttacksFor(player) {
@@ -93,38 +134,57 @@ function executeAttacksFor(player) {
   const opponents = state.players.filter((p) => p.id !== player.id && p.alive);
   if (!opponents.length) return;
 
-  for (const card of player.characterSlots.filter(Boolean)) {
-    const defenders = opponents.filter((p) => p.alive);
-    if (!defenders.length) break;
-    const defender = defenders[Math.floor(Math.random() * defenders.length)];
-    const targetChar = defender.characterSlots.find(Boolean) ?? null;
-    const result = applyCharacterAttack({ attacker: player, attackerCard: card, defender, targetCard: targetChar });
+  if (player.isBot) {
+    runBotAttackPhase(player, opponents, log);
+    return;
+  }
 
-    log(`${player.name} usou ${result.attackType} com ${card.name} e causou ${result.damage} em ${defender.name}.`);
-    if (!defender.alive) log(`${defender.name} foi derrotado!`);
-    tickCooldowns(card);
+  for (const attackerCard of player.characterSlots.filter(Boolean)) {
+    const selection = chooseHumanAttack(attackerCard, opponents);
+    if (!selection) continue;
+
+    const result = applyCharacterAttack({
+      attackerCard,
+      attackType: selection.attackType,
+      defender: selection.defender,
+      targetType: selection.targetType,
+      targetSlotIndex: selection.targetSlotIndex,
+    });
+
+    if (result.ok) {
+      log(`Você atacou com ${selection.attackType} causando ${result.damage}.`);
+    } else {
+      log(result.message);
+    }
+    refreshUI();
   }
 }
 
 function handleBossIfNeeded() {
   if (!shouldSpawnBoss(state.round)) return;
-  const attacks = getBossAttacks();
-  const chooser = (player) => {
-    if (player.isBot) return botChooseBossAttack();
-    const list = attacks.map((a) => `${a.id}`).join(", ");
-    const pick = Number(window.prompt(`Boss apareceu! Escolha ataque ${list}:`, "1"));
-    return [1, 2, 3, 4].includes(pick) ? pick : 1;
+  const turnPlayer = currentPlayer();
+  const chooser = (attacks) => {
+    if (turnPlayer?.isBot) return botChooseBossAttack();
+    const options = attacks.map((a) => `${a.id}`).join(", ");
+    const selected = Number(window.prompt(`Boss! Escolha golpe ${options}`, "1"));
+    return [1, 2, 3, 4].includes(selected) ? selected : 1;
   };
-  const logs = resolveBossTurn(state.players, chooser);
+
+  const { logs } = resolveBossTurn(state.players, chooser, state.round);
   logs.forEach(log);
+}
+
+function startTurn(player) {
+  resetTurnFlags(player);
+  startTurnCooldownTick(player);
+  drawCard(player);
 }
 
 function botTurnLoop() {
   while (state.started && currentPlayer()?.isBot && currentPlayer()?.alive) {
     const bot = currentPlayer();
-    resetTurnFlags(bot);
-    drawCard(bot);
-    runBotMainPhase(bot, state.players.filter((p) => p.id !== bot.id), log);
+    startTurn(bot);
+    runBotMainPhase(bot, state.players, log);
     executeAttacksFor(bot);
     advanceTurn(false);
   }
@@ -134,8 +194,7 @@ function checkGameOver() {
   const living = alivePlayers();
   if (living.length <= 1) {
     state.started = false;
-    if (living[0]) log(`Fim de jogo! Vencedor: ${living[0].name}`);
-    else log("Fim de jogo! Sem vencedores.");
+    log(living[0] ? `Fim de jogo! Vencedor: ${living[0].name}` : "Fim de jogo! Sem vencedores.");
     ui.endTurnBtn.disabled = true;
     return true;
   }
@@ -144,18 +203,14 @@ function checkGameOver() {
 
 function advanceTurn(triggeredByPlayer = true) {
   if (!state.started) return;
-  const cp = currentPlayer();
-  if (cp && cp.alive) executeAttacksFor(cp);
 
   state.turnIndex = nextAliveIndex(state.turnIndex);
-  if (state.turnIndex === 0) {
-    state.round += 1;
-    handleBossIfNeeded();
-    for (const p of state.players.filter((x) => x.alive)) {
-      resetTurnFlags(p);
-      drawCard(p);
-    }
-  }
+  if (state.turnIndex === 0) state.round += 1;
+
+  handleBossIfNeeded();
+
+  const cp = currentPlayer();
+  if (cp?.alive) startTurn(cp);
 
   refreshUI();
   if (checkGameOver()) return;
@@ -163,4 +218,8 @@ function advanceTurn(triggeredByPlayer = true) {
 }
 
 ui.startGameBtn.addEventListener("click", startGame);
-ui.endTurnBtn.addEventListener("click", () => advanceTurn(true));
+ui.endTurnBtn.addEventListener("click", () => {
+  const cp = currentPlayer();
+  if (cp?.alive) executeAttacksFor(cp);
+  advanceTurn(true);
+});

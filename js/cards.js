@@ -18,13 +18,13 @@ const characterNames = [
   "Monge Tempestuoso",
 ];
 
-const magicNames = [
-  "Escudo Arcano",
-  "Fúria Elemental",
-  "Ritual de Cura",
-  "Vórtice Sombrio",
-  "Chamado do Eclipse",
-  "Bênção Real",
+const magicCards = [
+  { name: "Ritual de Vida", effectType: "cura_personagem", value: 5, target: "ally_character" },
+  { name: "Runa de Guerra", effectType: "buff_ataque", value: 10, target: "ally_character" },
+  { name: "Seta Arcana", effectType: "dano_inimigo", value: 10, target: "enemy_character" },
+  { name: "Manto Regenerador", effectType: "cura_personagem", value: 5, target: "ally_character" },
+  { name: "Cântico da Lâmina", effectType: "buff_ataque", value: 10, target: "ally_character" },
+  { name: "Orbe Rachado", effectType: "dano_inimigo", value: 10, target: "enemy_character" },
 ];
 
 function pick(arr) {
@@ -33,29 +33,37 @@ function pick(arr) {
 
 export function createCharacterCard(id) {
   const faction = pick(FACTIONS);
+  const baseAttack = 18 + Math.floor(Math.random() * 8);
   return {
     id,
     type: "character",
     name: pick(characterNames),
     faction,
+    hp: 60,
+    attack: baseAttack,
+    image: `assets/cards/character_${id}.png`,
     attacks: {
-      G1: 180 + Math.floor(Math.random() * 70),
-      G2: 250 + Math.floor(Math.random() * 80),
-      GPLUS: 320 + Math.floor(Math.random() * 90),
+      G1: baseAttack,
+      G2: baseAttack + 8,
+      GPLUS: baseAttack + 12,
     },
     cooldowns: { G2: 0, GPLUS: 0 },
   };
 }
 
 export function createMagicCard(id) {
-  const effects = ["buff", "damage", "heal"];
+  const preset = pick(magicCards);
   return {
     id,
     type: "magic",
-    name: pick(magicNames),
-    effect: pick(effects),
-    power: 120 + Math.floor(Math.random() * 90),
+    name: preset.name,
     faction: pick(FACTIONS),
+    hp: 0,
+    attack: 0,
+    image: `assets/cards/magic_${id}.png`,
+    effectType: preset.effectType,
+    value: preset.value,
+    target: preset.target,
   };
 }
 

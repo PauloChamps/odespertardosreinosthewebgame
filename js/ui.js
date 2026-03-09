@@ -23,31 +23,54 @@ export function renderPlayers(players, activePlayerId, root) {
     card.innerHTML = `
       <strong>${player.name}${player.isBot ? " (BOT)" : ""}</strong>
       <div class="hp ${hpClass}">HP: ${player.hp}</div>
-      <div class="small">Mão: ${player.isBot ? "??" : player.hand.length} cartas</div>
-      <div class="small">Personagens</div>
-      <div class="slot-row">${player.characterSlots
-        .map((s) => `<div class="slot character">${s ? s.name : "-"}</div>`)
-        .join("")}</div>
-      <div class="small">Mágicas</div>
-      <div class="slot-row">${player.magicSlots
-        .map((s) => `<div class="slot magic">${s ? s.name : "-"}</div>`)
-        .join("")}</div>
+      <div class="small">Mão: ${player.isBot ? "🂠🂠🂠" : `${player.hand.length} cartas`}</div>
     `;
     root.appendChild(card);
   }
 }
 
+function slotHTML(card, kind, hideCard = false) {
+  if (!card) return `<div class="slot ${kind}">-</div>`;
+  if (hideCard) return `<div class="slot ${kind} back">🂠</div>`;
+  return `<div class="slot ${kind}" title="img: ${card.image}">${card.name}</div>`;
+}
+
 export function renderBattlefield(players, root) {
   root.innerHTML = "";
-  for (const player of players) {
-    const side = document.createElement("div");
-    side.className = "battle-side";
-    const cards = [...player.characterSlots, ...player.magicSlots];
-    side.innerHTML = `<h4>${player.name}</h4><div class="slot-row">${cards
-      .map((c) => `<div class="slot">${c ? (player.isBot ? "🂠" : c.name) : "-"}</div>`)
-      .join("")}</div>`;
-    root.appendChild(side);
+  const human = players.find((p) => !p.isBot);
+  const bots = players.filter((p) => p.isBot);
+
+  const top = document.createElement("div");
+  top.className = "battle-row top";
+  bots.forEach((bot) => {
+    const zone = document.createElement("section");
+    zone.className = "battle-zone";
+    zone.innerHTML = `
+      <h4>${bot.name}</h4>
+      <div class="zone-label">Personagens</div>
+      <div class="slot-row">${bot.characterSlots.map((c) => slotHTML(c, "character", true)).join("")}</div>
+      <div class="zone-label">Mágicas</div>
+      <div class="slot-row">${bot.magicSlots.map((c) => slotHTML(c, "magic", true)).join("")}</div>
+    `;
+    top.appendChild(zone);
+  });
+
+  const bottom = document.createElement("div");
+  bottom.className = "battle-row bottom";
+  if (human) {
+    bottom.innerHTML = `
+      <section class="battle-zone player-zone">
+        <h4>${human.name}</h4>
+        <div class="zone-label">Personagens</div>
+        <div class="slot-row">${human.characterSlots.map((c) => slotHTML(c, "character", false)).join("")}</div>
+        <div class="zone-label">Mágicas</div>
+        <div class="slot-row">${human.magicSlots.map((c) => slotHTML(c, "magic", false)).join("")}</div>
+      </section>
+    `;
   }
+
+  root.appendChild(top);
+  root.appendChild(bottom);
 }
 
 export function renderHand(player, root, onPlayCard) {
@@ -58,11 +81,12 @@ export function renderHand(player, root, onPlayCard) {
     div.innerHTML = `
       <strong>${card.name}</strong>
       <div class="small">Tipo: ${card.type}</div>
-      <div class="small">Facção: ${card.faction}</div>
+      <div class="small">ATK: ${card.attack} | HP: ${card.hp}</div>
+      <div class="small">Imagem: ${card.image}</div>
       <div class="small">${
         card.type === "character"
           ? `G1 ${card.attacks.G1} / G2 ${card.attacks.G2} / G+ ${card.attacks.GPLUS}`
-          : `Efeito ${card.effect} (${card.power})`
+          : `${card.effectType} (${card.value})`
       }</div>
     `;
     div.addEventListener("click", () => onPlayCard(card.id));
@@ -71,5 +95,7 @@ export function renderHand(player, root, onPlayCard) {
 }
 
 export function appendLog(root, message) {
-  root.textContent = `${message}\n${root.textContent}`.trim();
+  const lines = root.textContent ? root.textContent.split("\n") : [];
+  const next = [message, ...lines].slice(0, 8);
+  root.textContent = next.join("\n");
 }

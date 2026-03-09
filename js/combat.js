@@ -1,66 +1,79 @@
 import { hasAdvantage } from "./cards.js";
 
-export function chooseAttackType(character) {
-  if (character.cooldowns.GPLUS === 0) return "GPLUS";
-  if (character.cooldowns.G2 === 0) return "G2";
-  return "G1";
+/**
+ * Controla se o ataque especial pode ser usado nesta rodada.
+ * G2 e G+ têm recarga e só podem ser usados a cada 2 rodadas do dono.
+ */
+export function canUseAttack(character, attackType) {
+  if (attackType === "G1") return true;
+  if (attackType === "G2") return character.cooldowns.G2 === 0;
+  if (attackType === "GPLUS") return character.cooldowns.GPLUS === 0;
+  return false;
 }
 
-export function tickCooldowns(character) {
-  if (character.cooldowns.G2 > 0) character.cooldowns.G2 -= 1;
-  if (character.cooldowns.GPLUS > 0) character.cooldowns.GPLUS -= 1;
+export function startTurnCooldownTick(player) {
+  for (const card of player.characterSlots.filter(Boolean)) {
+    if (card.cooldowns.G2 > 0) card.cooldowns.G2 -= 1;
+    if (card.cooldowns.GPLUS > 0) card.cooldowns.GPLUS -= 1;
+  }
 }
 
-export function applyCharacterAttack({ attacker, attackerCard, defender, targetCard }) {
-  const attackType = chooseAttackType(attackerCard);
+export function applyCharacterAttack({ attackerCard, attackType, defender, targetType, targetSlotIndex }) {
   let damage = attackerCard.attacks[attackType];
 
-  if (targetCard && hasAdvantage(attackerCard.faction, targetCard.faction)) {
-    damage += 5;
-  }
+  if (attackType === "G2") attackerCard.cooldowns.G2 = 2;
+  if (attackType === "GPLUS") attackerCard.cooldowns.GPLUS = 2;
 
-  if (attackType === "G2") attackerCard.cooldowns.G2 = 1;
-  if (attackType === "GPLUS") attackerCard.cooldowns.GPLUS = 1;
-
-  if (targetCard) {
-    targetCard.tempHp = (targetCard.tempHp ?? 260) - damage;
-    if (targetCard.tempHp <= 0) {
-      const idx = defender.characterSlots.findIndex((c) => c?.id === targetCard.id);
-      if (idx >= 0) defender.characterSlots[idx] = null;
-      return { attackType, damage, target: "character", defeated: true };
+  if (targetType === "character") {
+    const targetCard = defender.characterSlots[targetSlotIndex];
+    if (!targetCard) {
+      return { ok: false, message: "Alvo inválido." };
     }
-    return { attackType, damage, target: "character", defeated: false };
+
+    if (hasAdvantage(attackerCard.faction, targetCard.faction)) damage += 5;
+
+    targetCard.hp -= damage;
+    if (targetCard.hp <= 0) {
+      defender.characterSlots[targetSlotIndex] = null;
+      return { ok: true, damage, targetType, defeated: true };
+    }
+    return { ok: true, damage, targetType, defeated: false };
   }
 
   defender.hp = Math.max(0, defender.hp - damage);
   if (defender.hp === 0) defender.alive = false;
-  return { attackType, damage, target: "player", defeated: !defender.alive };
+  return { ok: true, damage, targetType: "player", defeated: !defender.alive };
 }
 
-export function applyMagic(card, player, opponents) {
-  if (card.effect === "heal") {
-    player.hp = Math.min(3000, player.hp + card.power);
-    return `${player.name} curou ${card.power} HP com ${card.name}.`;
+/**
+ * Sistema de magias baseado em tipo/valor/alvo.
+ */
+export function applyMagicEffect(card, caster, allies, enemies, targetInfo) {
+  if (card.effectType === "cura_personagem") {
+    const target = allies[targetInfo.playerIndex]?.characterSlots[targetInfo.slotIndex];
+    if (!target) return "Magia falhou: sem personagem aliado no alvo.";
+    target.hp += card.value;
+    return `${caster.name} curou ${target.name} em +${card.value} HP.`;
   }
 
-  const aliveOpponents = opponents.filter((o) => o.alive);
-  if (aliveOpponents.length === 0) return `${card.name} sem alvo.`;
-
-  const target = aliveOpponents[Math.floor(Math.random() * aliveOpponents.length)];
-  if (card.effect === "damage") {
-    target.hp = Math.max(0, target.hp - card.power);
-    if (target.hp === 0) target.alive = false;
-    return `${player.name} causou ${card.power} em ${target.name} com ${card.name}.`;
+  if (card.effectType === "buff_ataque") {
+    const target = allies[targetInfo.playerIndex]?.characterSlots[targetInfo.slotIndex];
+    if (!target) return "Magia falhou: sem personagem aliado no alvo.";
+    target.attack += card.value;
+    target.attacks.G1 += card.value;
+    target.attacks.G2 += card.value;
+    target.attacks.GPLUS += card.value;
+    return `${caster.name} aumentou o ataque de ${target.name} em +${card.value}.`;
   }
 
-  // buff
-  const char = player.characterSlots.find(Boolean);
-  if (char) {
-    char.attacks.G1 += 30;
-    char.attacks.G2 += 30;
-    char.attacks.GPLUS += 30;
-    return `${player.name} fortaleceu ${char.name} com ${card.name}.`;
+  if (card.effectType === "dano_inimigo") {
+    const enemy = enemies[targetInfo.playerIndex];
+    const target = enemy?.characterSlots[targetInfo.slotIndex];
+    if (!target) return "Magia falhou: sem personagem inimigo no alvo.";
+    target.hp -= card.value;
+    if (target.hp <= 0) enemy.characterSlots[targetInfo.slotIndex] = null;
+    return `${caster.name} causou ${card.value} de dano mágico em ${target.name}.`;
   }
 
-  return `${card.name} não teve efeito (sem personagem).`;
+  return "Magia sem efeito.";
 }
