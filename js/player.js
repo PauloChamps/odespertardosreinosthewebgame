@@ -10,6 +10,7 @@ export function createPlayer(id, name, isBot = false) {
     hand: [],
     characterSlots: Array(5).fill(null),
     magicSlots: Array(5).fill(null),
+    graveyard: [],
     usedCharacterThisTurn: false,
     usedMagicThisTurn: false,
     alive: true,

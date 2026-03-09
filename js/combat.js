@@ -1,10 +1,8 @@
 import { hasAdvantage } from "./cards.js";
 
-/**
- * Controla se o ataque especial pode ser usado nesta rodada.
- * G2 e G+ têm recarga e só podem ser usados a cada 2 rodadas do dono.
- */
+/** Regras de disponibilidade de golpes por carta. */
 export function canUseAttack(character, attackType) {
+  if (!character.attacks[attackType]) return false;
   if (attackType === "G1") return true;
   if (attackType === "G2") return character.cooldowns.G2 === 0;
   if (attackType === "GPLUS") return character.cooldowns.GPLUS === 0;
@@ -18,19 +16,25 @@ export function startTurnCooldownTick(player) {
   }
 }
 
+function absorbShield(targetCard, damage) {
+  if (!targetCard || targetCard.shield <= 0) return damage;
+  const blocked = Math.min(targetCard.shield, damage);
+  targetCard.shield -= blocked;
+  return damage - blocked;
+}
+
 export function applyCharacterAttack({ attackerCard, attackType, defender, targetType, targetSlotIndex }) {
-  let damage = attackerCard.attacks[attackType];
+  let damage = attackerCard.attacks[attackType] ?? 0;
 
   if (attackType === "G2") attackerCard.cooldowns.G2 = 2;
   if (attackType === "GPLUS") attackerCard.cooldowns.GPLUS = 2;
 
   if (targetType === "character") {
     const targetCard = defender.characterSlots[targetSlotIndex];
-    if (!targetCard) {
-      return { ok: false, message: "Alvo inválido." };
-    }
+    if (!targetCard) return { ok: false, message: "Alvo inválido." };
 
     if (hasAdvantage(attackerCard.faction, targetCard.faction)) damage += 5;
+    damage = absorbShield(targetCard, damage);
 
     targetCard.hp -= damage;
     if (targetCard.hp <= 0) {
@@ -46,7 +50,8 @@ export function applyCharacterAttack({ attackerCard, attackType, defender, targe
 }
 
 /**
- * Sistema de magias baseado em tipo/valor/alvo.
+ * Magias com funcionalidades próprias.
+ * Após uso, o card deve ir para o cemitério (tratado em game.js).
  */
 export function applyMagicEffect(card, caster, allies, enemies, targetInfo) {
   if (card.effectType === "cura_personagem") {
@@ -60,9 +65,9 @@ export function applyMagicEffect(card, caster, allies, enemies, targetInfo) {
     const target = allies[targetInfo.playerIndex]?.characterSlots[targetInfo.slotIndex];
     if (!target) return "Magia falhou: sem personagem aliado no alvo.";
     target.attack += card.value;
-    target.attacks.G1 += card.value;
-    target.attacks.G2 += card.value;
-    target.attacks.GPLUS += card.value;
+    target.attacks.G1 = (target.attacks.G1 ?? 0) + card.value;
+    if (target.attacks.G2) target.attacks.G2 += card.value;
+    if (target.attacks.GPLUS) target.attacks.GPLUS += card.value;
     return `${caster.name} aumentou o ataque de ${target.name} em +${card.value}.`;
   }
 
@@ -73,6 +78,28 @@ export function applyMagicEffect(card, caster, allies, enemies, targetInfo) {
     target.hp -= card.value;
     if (target.hp <= 0) enemy.characterSlots[targetInfo.slotIndex] = null;
     return `${caster.name} causou ${card.value} de dano mágico em ${target.name}.`;
+  }
+
+  if (card.effectType === "escudo_personagem") {
+    const target = allies[targetInfo.playerIndex]?.characterSlots[targetInfo.slotIndex];
+    if (!target) return "Magia falhou: sem personagem aliado no alvo.";
+    target.shield = (target.shield ?? 0) + card.value;
+    return `${caster.name} concedeu escudo ${card.value} para ${target.name}.`;
+  }
+
+  if (card.effectType === "debuff_inimigo") {
+    const enemy = enemies[targetInfo.playerIndex];
+    const target = enemy?.characterSlots[targetInfo.slotIndex];
+    if (!target) return "Magia falhou: sem personagem inimigo no alvo.";
+    target.attacks.G1 = Math.max(1, target.attacks.G1 - card.value);
+    if (target.attacks.G2) target.attacks.G2 = Math.max(1, target.attacks.G2 - card.value);
+    if (target.attacks.GPLUS) target.attacks.GPLUS = Math.max(1, target.attacks.GPLUS - card.value);
+    return `${caster.name} enfraqueceu ${target.name} em ${card.value} ATK.`;
+  }
+
+  if (card.effectType === "cura_jogador") {
+    caster.hp = Math.min(3000, caster.hp + card.value);
+    return `${caster.name} recuperou ${card.value} HP.`;
   }
 
   return "Magia sem efeito.";

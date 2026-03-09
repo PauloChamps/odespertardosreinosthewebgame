@@ -18,19 +18,18 @@ export function runBotMainPhase(player, allPlayers, log) {
 
   const magicIdx = player.hand.findIndex((c) => c.type === "magic");
   if (!player.usedMagicThisTurn && magicIdx >= 0) {
-    const slot = firstEmptyIndex(player.magicSlots);
-    if (slot >= 0) {
-      const [card] = player.hand.splice(magicIdx, 1);
-      player.magicSlots[slot] = card;
-      player.usedMagicThisTurn = true;
-
-      const targetInfo = chooseBotMagicTarget(card, allies, opponents);
-      log(applyMagicEffect(card, player, allies, opponents, targetInfo));
-    }
+    const [card] = player.hand.splice(magicIdx, 1);
+    player.usedMagicThisTurn = true;
+    const targetInfo = chooseBotMagicTarget(card, allies, opponents);
+    log(applyMagicEffect(card, player, allies, opponents, targetInfo));
+    player.graveyard.push(card);
+    log(`${player.name} enviou ${card.name} para o cemitério.`);
   }
 }
 
 function chooseBotMagicTarget(card, allies, opponents) {
+  if (card.target === "ally_player") return { playerIndex: 0, slotIndex: 0 };
+
   if (card.target === "ally_character") {
     const ally = allies[0];
     const slotIndex = ally.characterSlots.findIndex(Boolean);
@@ -39,7 +38,7 @@ function chooseBotMagicTarget(card, allies, opponents) {
 
   const enemyIndex = opponents.findIndex((p) => p.characterSlots.some(Boolean));
   const chosenEnemy = opponents[Math.max(0, enemyIndex)] ?? opponents[0];
-  const slotIndex = chosenEnemy.characterSlots.findIndex(Boolean);
+  const slotIndex = chosenEnemy?.characterSlots.findIndex(Boolean) ?? 0;
   return { playerIndex: Math.max(0, enemyIndex), slotIndex: Math.max(0, slotIndex) };
 }
 
@@ -59,9 +58,7 @@ export function runBotAttackPhase(player, opponents, log) {
       : "G1";
 
     const result = applyCharacterAttack({ attackerCard, attackType, defender: enemy, targetType, targetSlotIndex });
-    if (result.ok) {
-      log(`${player.name} atacou com ${attackType} e causou ${result.damage}.`);
-    }
+    if (result.ok) log(`${player.name} atacou com ${attackType} e causou ${result.damage}.`);
   }
 }
 

@@ -7,24 +7,24 @@ export const ADVANTAGE_TABLE = {
   MO: ["HB", "HU"],
 };
 
-const characterNames = [
-  "Sentinela de Ferro",
-  "Arqueiro da Névoa",
-  "Guardião Rubro",
-  "Maga dos Véus",
-  "Lâmina Aurora",
-  "Bastião Lunar",
-  "Caçadora de Runas",
-  "Monge Tempestuoso",
+const characterTemplates = [
+  { name: "Sentinela de Ferro", attacks: ["G1", "G2", "GPLUS"] },
+  { name: "Arqueiro da Névoa", attacks: ["G1", "G2"] },
+  { name: "Guardião Rubro", attacks: ["G1", "GPLUS"] },
+  { name: "Maga dos Véus", attacks: ["G1", "G2", "GPLUS"] },
+  { name: "Lâmina Aurora", attacks: ["G1", "G2"] },
+  { name: "Bastião Lunar", attacks: ["G1", "GPLUS"] },
+  { name: "Caçadora de Runas", attacks: ["G1", "G2", "GPLUS"] },
+  { name: "Monge Tempestuoso", attacks: ["G1", "G2"] },
 ];
 
 const magicCards = [
-  { name: "Ritual de Vida", effectType: "cura_personagem", value: 5, target: "ally_character" },
+  { name: "Ritual de Vida", effectType: "cura_personagem", value: 8, target: "ally_character" },
   { name: "Runa de Guerra", effectType: "buff_ataque", value: 10, target: "ally_character" },
   { name: "Seta Arcana", effectType: "dano_inimigo", value: 10, target: "enemy_character" },
-  { name: "Manto Regenerador", effectType: "cura_personagem", value: 5, target: "ally_character" },
-  { name: "Cântico da Lâmina", effectType: "buff_ataque", value: 10, target: "ally_character" },
-  { name: "Orbe Rachado", effectType: "dano_inimigo", value: 10, target: "enemy_character" },
+  { name: "Escudo Rúnico", effectType: "escudo_personagem", value: 8, target: "ally_character" },
+  { name: "Quebra-Guarda", effectType: "debuff_inimigo", value: 6, target: "enemy_character" },
+  { name: "Chamado Vital", effectType: "cura_jogador", value: 15, target: "ally_player" },
 ];
 
 function pick(arr) {
@@ -33,21 +33,24 @@ function pick(arr) {
 
 export function createCharacterCard(id) {
   const faction = pick(FACTIONS);
+  const template = pick(characterTemplates);
   const baseAttack = 18 + Math.floor(Math.random() * 8);
+
+  const attacks = { G1: baseAttack };
+  if (template.attacks.includes("G2")) attacks.G2 = baseAttack + 8;
+  if (template.attacks.includes("GPLUS")) attacks.GPLUS = baseAttack + 12;
+
   return {
     id,
     type: "character",
-    name: pick(characterNames),
+    name: template.name,
     faction,
     hp: 60,
     attack: baseAttack,
     image: `assets/cards/character_${id}.png`,
-    attacks: {
-      G1: baseAttack,
-      G2: baseAttack + 8,
-      GPLUS: baseAttack + 12,
-    },
+    attacks,
     cooldowns: { G2: 0, GPLUS: 0 },
+    shield: 0,
   };
 }
 

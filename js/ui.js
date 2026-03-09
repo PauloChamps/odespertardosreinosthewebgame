@@ -7,6 +7,10 @@ export function createUIRefs() {
     playersArea: document.getElementById("playersArea"),
     battlefield: document.getElementById("battlefield"),
     hand: document.getElementById("hand"),
+    botHand: document.getElementById("botHand"),
+    bossCenter: document.getElementById("bossCenter"),
+    bossImage: document.getElementById("bossImage"),
+    bossName: document.getElementById("bossName"),
     log: document.getElementById("statusLog"),
     roundCounter: document.getElementById("roundCounter"),
     turnCounter: document.getElementById("turnCounter"),
@@ -23,7 +27,7 @@ export function renderPlayers(players, activePlayerId, root) {
     card.innerHTML = `
       <strong>${player.name}${player.isBot ? " (BOT)" : ""}</strong>
       <div class="hp ${hpClass}">HP: ${player.hp}</div>
-      <div class="small">Mão: ${player.isBot ? "🂠🂠🂠" : `${player.hand.length} cartas`}</div>
+      <div class="small">Cemitério: ${player.graveyard.length}</div>
     `;
     root.appendChild(card);
   }
@@ -32,7 +36,7 @@ export function renderPlayers(players, activePlayerId, root) {
 function slotHTML(card, kind, hideCard = false) {
   if (!card) return `<div class="slot ${kind}">-</div>`;
   if (hideCard) return `<div class="slot ${kind} back">🂠</div>`;
-  return `<div class="slot ${kind}" title="img: ${card.image}">${card.name}</div>`;
+  return `<div class="slot ${kind}" title="img: ${card.image}">${card.name}<span class="tiny">HP ${card.hp}</span></div>`;
 }
 
 export function renderBattlefield(players, root) {
@@ -47,10 +51,8 @@ export function renderBattlefield(players, root) {
     zone.className = "battle-zone";
     zone.innerHTML = `
       <h4>${bot.name}</h4>
-      <div class="zone-label">Personagens</div>
+      <div class="zone-label">Em jogo</div>
       <div class="slot-row">${bot.characterSlots.map((c) => slotHTML(c, "character", true)).join("")}</div>
-      <div class="zone-label">Mágicas</div>
-      <div class="slot-row">${bot.magicSlots.map((c) => slotHTML(c, "magic", true)).join("")}</div>
     `;
     top.appendChild(zone);
   });
@@ -61,16 +63,26 @@ export function renderBattlefield(players, root) {
     bottom.innerHTML = `
       <section class="battle-zone player-zone">
         <h4>${human.name}</h4>
-        <div class="zone-label">Personagens</div>
+        <div class="zone-label">Em jogo</div>
         <div class="slot-row">${human.characterSlots.map((c) => slotHTML(c, "character", false)).join("")}</div>
-        <div class="zone-label">Mágicas</div>
-        <div class="slot-row">${human.magicSlots.map((c) => slotHTML(c, "magic", false)).join("")}</div>
       </section>
     `;
   }
 
   root.appendChild(top);
   root.appendChild(bottom);
+}
+
+export function renderBotHand(players, root) {
+  root.innerHTML = "";
+  const bots = players.filter((p) => p.isBot && p.alive);
+  bots.forEach((bot) => {
+    const block = document.createElement("div");
+    block.className = "bot-hand-block";
+    const backs = Array(Math.min(bot.hand.length, 10)).fill("<div class='mini-back'>🂠</div>").join("");
+    block.innerHTML = `<strong>${bot.name} - mão</strong><div class="mini-hand">${backs || "-"}</div>`;
+    root.appendChild(block);
+  });
 }
 
 export function renderHand(player, root, onPlayCard) {
@@ -85,7 +97,7 @@ export function renderHand(player, root, onPlayCard) {
       <div class="small">Imagem: ${card.image}</div>
       <div class="small">${
         card.type === "character"
-          ? `G1 ${card.attacks.G1} / G2 ${card.attacks.G2} / G+ ${card.attacks.GPLUS}`
+          ? `Golpes: ${Object.keys(card.attacks).join(", ")}`
           : `${card.effectType} (${card.value})`
       }</div>
     `;
@@ -94,8 +106,18 @@ export function renderHand(player, root, onPlayCard) {
   }
 }
 
+export function showBossCenter(ui, boss) {
+  ui.bossName.textContent = `${boss.name} (${boss.type})`;
+  ui.bossImage.src = boss.image;
+  ui.bossImage.alt = boss.name;
+  ui.bossCenter.classList.remove("hidden");
+}
+
+export function hideBossCenter(ui) {
+  ui.bossCenter.classList.add("hidden");
+}
+
 export function appendLog(root, message) {
   const lines = root.textContent ? root.textContent.split("\n") : [];
-  const next = [message, ...lines].slice(0, 8);
-  root.textContent = next.join("\n");
+  root.textContent = [message, ...lines].slice(0, 8).join("\n");
 }
