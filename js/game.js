@@ -7,12 +7,14 @@ import {
   renderPlayers,
   appendLog,
   renderBotHand,
-  showBossCenter,
-  hideBossCenter,
+  showBossField,
+  hideBossField,
+  renderCharacterCatalog,
 } from "./ui.js";
 import { runBotMainPhase, runBotAttackPhase, botChooseBossAttack } from "./ai.js";
 import { applyCharacterAttack, applyMagicEffect, canUseAttack, startTurnCooldownTick } from "./combat.js";
 import { resolveBossTurn, shouldSpawnBoss } from "./boss.js";
+import { CHARACTER_CATALOG } from "./cards.js";
 
 const ui = createUIRefs();
 const state = { players: [], round: 1, turnIndex: 0, started: false };
@@ -44,11 +46,30 @@ function refreshUI() {
   renderPlayers(state.players, cp?.id, ui.playersArea);
   renderBattlefield(state.players, ui.battlefield);
   renderBotHand(state.players, ui.botHand);
+  renderCharacterCatalog(CHARACTER_CATALOG, ui.cardCatalog);
 
   if (cp && !cp.isBot && cp.alive) renderHand(cp, ui.hand, playHumanCard);
   else ui.hand.innerHTML = "<div class='card hidden-card'>Aguarde o turno dos bots...</div>";
 
   ui.endTurnBtn.disabled = !cp || cp.isBot || !cp.alive;
+  ui.surrenderBtn.disabled = !state.started || !state.players[0]?.alive;
+}
+
+function finishGame(message) {
+  state.started = false;
+  ui.endTurnBtn.disabled = true;
+  ui.surrenderBtn.disabled = true;
+  log(message);
+}
+
+function surrenderMatch() {
+  if (!state.started) return;
+  const player = state.players.find((p) => !p.isBot);
+  if (!player || !player.alive) return;
+  player.alive = false;
+  player.hp = 0;
+  finishGame("Você desistiu da partida.");
+  refreshUI();
 }
 
 function startGame() {
@@ -63,16 +84,12 @@ function startGame() {
   ui.setupPanel.classList.add("hidden");
   ui.table.classList.remove("hidden");
   ui.log.textContent = "";
-  hideBossCenter(ui);
+  hideBossField(ui);
 
   log("Jogo iniciado. Rodada 1 sem ataques.");
   refreshUI();
 }
 
-/**
- * Magias são ativadas e imediatamente vão para o cemitério,
- * liberando espaço para novas mágicas na rodada seguinte.
- */
 function playHumanCard(cardId) {
   const player = currentPlayer();
   if (!player || player.isBot || !player.alive) return;
@@ -102,7 +119,6 @@ function playHumanCard(cardId) {
   const enemies = state.players.filter((p) => p.id !== player.id && p.alive);
   const targetInfo = chooseHumanMagicTarget(card, enemies);
   log(applyMagicEffect(card, player, allies, enemies, targetInfo));
-
   player.graveyard.push(card);
   log(`${card.name} foi para o cemitério.`);
   refreshUI();
@@ -110,7 +126,6 @@ function playHumanCard(cardId) {
 
 function chooseHumanMagicTarget(card, enemies) {
   if (card.target === "ally_player") return { playerIndex: 0, slotIndex: 0 };
-
   if (card.target === "ally_character") {
     const slotIndex = Number(window.prompt("Escolha slot aliado (0-4):", "0"));
     return { playerIndex: 0, slotIndex: Number.isInteger(slotIndex) ? slotIndex : 0 };
@@ -119,10 +134,7 @@ function chooseHumanMagicTarget(card, enemies) {
   const enemyList = enemies.map((e, idx) => `${idx}-${e.name}`).join(" | ");
   const playerIndex = Number(window.prompt(`Escolha inimigo: ${enemyList}`, "0"));
   const slotIndex = Number(window.prompt("Escolha slot inimigo (0-4):", "0"));
-  return {
-    playerIndex: Number.isInteger(playerIndex) ? playerIndex : 0,
-    slotIndex: Number.isInteger(slotIndex) ? slotIndex : 0,
-  };
+  return { playerIndex: Number.isInteger(playerIndex) ? playerIndex : 0, slotIndex: Number.isInteger(slotIndex) ? slotIndex : 0 };
 }
 
 function chooseHumanAttack(attackerCard, opponents) {
@@ -130,16 +142,13 @@ function chooseHumanAttack(attackerCard, opponents) {
   const atk = (window.prompt(`Escolha ataque: ${available.join(", ")}`, available[0]) || available[0]).toUpperCase();
   const attackType = atk === "G+" ? "GPLUS" : atk;
   if (!available.includes(attackType)) return null;
-  if (!canUseAttack(attackerCard, attackType)) {
-    log(`Ataque ${attackType} em recarga.`);
-    return null;
-  }
+  if (!canUseAttack(attackerCard, attackType)) return log(`Ataque ${attackType} em recarga.`), null;
 
   const opponentList = opponents.map((p, i) => `${i}-${p.name}`).join(" | ");
   const opIndex = Number(window.prompt(`Escolha alvo jogador: ${opponentList}`, "0"));
   const defender = opponents[opIndex] ?? opponents[0];
-
   const targetType = (window.prompt("Alvo: P (jogador) ou C (personagem)", "C") || "C").toUpperCase();
+
   if (targetType === "C") {
     const slotIndex = Number(window.prompt("Escolha slot do personagem inimigo (0-4)", "0"));
     return { attackType, defender, targetType: "character", targetSlotIndex: Number.isInteger(slotIndex) ? slotIndex : 0 };
@@ -184,9 +193,9 @@ function handleBossIfNeeded() {
   };
 
   const { boss, logs } = resolveBossTurn(state.players, chooser, state.round);
-  showBossCenter(ui, boss);
+  showBossField(ui, boss);
   logs.forEach(log);
-  setTimeout(() => hideBossCenter(ui), 1800);
+  setTimeout(() => hideBossField(ui), 2200);
 }
 
 function startTurn(player) {
@@ -208,9 +217,7 @@ function botTurnLoop() {
 function checkGameOver() {
   const living = alivePlayers();
   if (living.length <= 1) {
-    state.started = false;
-    log(living[0] ? `Fim de jogo! Vencedor: ${living[0].name}` : "Fim de jogo! Sem vencedores.");
-    ui.endTurnBtn.disabled = true;
+    finishGame(living[0] ? `Fim de jogo! Vencedor: ${living[0].name}` : "Fim de jogo! Sem vencedores.");
     return true;
   }
   return false;
@@ -218,12 +225,10 @@ function checkGameOver() {
 
 function advanceTurn(triggeredByPlayer = true) {
   if (!state.started) return;
-
   state.turnIndex = nextAliveIndex(state.turnIndex);
   if (state.turnIndex === 0) state.round += 1;
 
   handleBossIfNeeded();
-
   const cp = currentPlayer();
   if (cp?.alive) startTurn(cp);
 
@@ -238,3 +243,4 @@ ui.endTurnBtn.addEventListener("click", () => {
   if (cp?.alive) executeAttacksFor(cp);
   advanceTurn(true);
 });
+ui.surrenderBtn.addEventListener("click", surrenderMatch);
