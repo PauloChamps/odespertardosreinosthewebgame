@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>O Despertar dos Reinos</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>O Despertar dos Reinos</h1>
+      <div class="hud">
+        <span id="roundCounter">Rodada: 1</span>
+        <span id="turnCounter">Turno: -</span>
+        <button id="endTurnBtn">Passar Turno</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="setup" id="setupPanel">
+        <h2>Configuração</h2>
+        <label for="playerCount">Número de jogadores</label>
+        <select id="playerCount">
+          <option value="2">2 (Você + 1 bot)</option>
+          <option value="3">3 (Você + 2 bots)</option>
+          <option value="4">4 (Você + 3 bots)</option>
+        </select>
+        <button id="startGameBtn">Iniciar Jogo</button>
+      </section>
+
+      <section id="table" class="hidden">
+        <div class="battlefield-wrapper">
+          <h3>Mesa de Batalha</h3>
+          <div id="battlefield" class="battlefield"></div>
+        </div>
+
+        <div id="playersArea" class="players-area"></div>
+
+        <section class="hand-area">
+          <h3>Sua Mão</h3>
+          <div id="hand" class="hand"></div>
+        </section>
+      </section>
+    </main>
+
+    <section id="statusLog" class="status-log"></section>
+
+    <script type="module" src="js/game.js"></script>
+  </body>
+</html>
