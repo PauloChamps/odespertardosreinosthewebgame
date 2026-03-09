@@ -1,0 +1,111 @@
+:root {
+  --bg: #10131d;
+  --panel: #181d2b;
+  --panel-alt: #22293b;
+  --accent: #4cc9f0;
+  --text: #edf2f4;
+  --danger: #ef476f;
+  --ok: #06d6a0;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 18px;
+  background: var(--panel);
+  border-bottom: 1px solid #2b3350;
+}
+.hud { display: flex; gap: 14px; align-items: center; }
+button, select {
+  background: var(--accent);
+  color: #0b132b;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-weight: 700;
+}
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+main { padding: 16px; }
+.setup, .status-log, .battlefield-wrapper, .hand-area {
+  background: var(--panel);
+  border: 1px solid #2b3350;
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 14px;
+}
+.status-log { min-height: 72px; white-space: pre-line; }
+.hidden { display: none; }
+.players-area {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.player-card {
+  background: var(--panel-alt);
+  border-radius: 8px;
+  padding: 10px;
+}
+.player-card.active { outline: 2px solid var(--accent); }
+.hp.alive { color: var(--ok); }
+.hp.low { color: #ffd166; }
+.hp.dead { color: var(--danger); }
+.slot-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  margin-top: 8px;
+}
+.slot {
+  min-height: 42px;
+  border: 1px dashed #516087;
+  border-radius: 6px;
+  padding: 4px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.slot.magic { background: rgba(76, 201, 240, 0.08); }
+.slot.character { background: rgba(6, 214, 160, 0.08); }
+
+.battlefield {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.battle-side {
+  background: var(--panel-alt);
+  border-radius: 8px;
+  padding: 8px;
+}
+.battle-side h4 { margin: 0 0 8px; }
+
+.hand {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+.card {
+  border: 1px solid #6878a7;
+  border-radius: 8px;
+  background: #1f2740;
+  padding: 8px;
+  cursor: pointer;
+}
+.card:hover { border-color: var(--accent); }
+.card.hidden-card {
+  background: linear-gradient(145deg, #293252, #141a2d);
+  color: #a3b6ff;
+}
+.small { font-size: 12px; opacity: 0.8; }
