@@ -1,7 +1,7 @@
 const BOSS_DAMAGE_TABLE = [20, 30, 40, 50];
 
 const BOSSES = [
-  { name: "Azhor", type: "Abissal", image: "assets/boss/azhor.png" },
+  { name: "Bruxa dos Pesadelos", type: "Humano-Boss", image: "assets/boss/bruxa-dos-pesadelos.jpeg" },
   { name: "Kelmora", type: "Dracônico", image: "assets/boss/kelmora.png" },
   { name: "Zyra", type: "Arcano", image: "assets/boss/zyra.png" },
   { name: "Morgrin", type: "Sombrio", image: "assets/boss/morgrin.png" },
